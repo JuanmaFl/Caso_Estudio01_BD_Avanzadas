@@ -1,0 +1,14 @@
+# Archivos de Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Directorios de IDEs
+.idea/
+.vscode/
+
+# Archivos de Docker (Volúmenes locales que NO se deben subir)
+pgdata/
+postgres_data/
+
+# Archivos de entorno (Seguridad)
+.env
