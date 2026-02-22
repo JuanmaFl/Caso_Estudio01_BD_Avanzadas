@@ -12,6 +12,8 @@
 ## 1. Objetivo del Trabajo
 Implementar, medir y optimizar una base de datos transaccional con un volumen de **5 millones de registros** (Big Data académico), simulando un entorno de comercio electrónico ("EafitShop"). El objetivo central es comparar el rendimiento entre una infraestructura contenerizada (**Docker en EC2**) y un servicio gestionado (**AWS RDS**), aplicando técnicas incrementales (Índices, Particionamiento, Reescritura, Vistas Materializadas) para mitigar cuellos de botella de I/O y CPU.
 
+---
+
 ## 2. Descripción del Caso
 El sistema **EafitShop** simula una plataforma con 5 años de histórico operativo, conteniendo:
 * **1 Millón** de Clientes.
@@ -19,6 +21,8 @@ El sistema **EafitShop** simula una plataforma con 5 años de histórico operati
 * **20 Millones** de Ítems de pedido.
 
 **El Reto:** El sistema base carece de optimizaciones, generando tiempos de respuesta inaceptables (>20 segundos) en reportes analíticos y bloqueos en operaciones transaccionales debido a *Sequential Scans* (lecturas completas de disco).
+
+---
 
 ## 3. Situación Real Empresarial
 Este escenario replica los desafíos de escalabilidad que enfrentan empresas como **Uber** o **Shopify** durante picos de tráfico. Cuando las tablas OLTP crecen exponencialmente, los *JOINs* masivos degradan el servicio. Estudios de ingeniería (como los de *Instagram* migrando a Postgres) demuestran que en la nube, el **costo de I/O aleatorio** (IOPS) en discos de red puede hacer que las consultas mal optimizadas sean más lentas que en un servidor local, obligando al uso de estrategias como **Vistas Materializadas** para reportes o **Sharding**.
@@ -45,7 +49,7 @@ Este escenario replica los desafíos de escalabilidad que enfrentan empresas com
     * Escenario ideal para aplicar **Reescritura de Queries (Query Rewriting)** usando CTEs (*Common Table Expressions*) para filtrar antes de unir.
     * Reveló el **cuello de botella de I/O en la Nube (RDS)**: los índices complejos generaron lecturas aleatorias (*Random I/O*) que saturaron el disco EBS, un fenómeno no visible en el SSD local.
 
-
+---
 
 ## 4. Ambiente Tecnológico Utilizado
 
