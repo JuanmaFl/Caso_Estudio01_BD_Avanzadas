@@ -29,7 +29,7 @@ Este escenario replica los desafíos de escalabilidad que enfrentan empresas com
 * **Justificación en el Trabajo:**
     * Demuestra las limitaciones de los **Índices B-Tree** para lecturas masivas (*Full Table Scans*).
     * Evidencia el **fallo del Particionamiento** para datos "calientes" (*Hot Data*), donde el overhead de gestión supera la ganancia.
-    * Justifica la implementación de **Vistas Materializadas** como única solución viable para reportes de Big Data (reducción de 30s a 0.1ms).
+    * Justifica la implementación de **Vistas Materializadas** como técnica que mostró mejores resultados para reportes de Big Data (reducción de 30s a 0.1ms).
 
 ### Consulta Q2: Búsqueda Puntual de Cliente (OLTP)
 * **Descripción:** Recupera el historial de compras de un usuario específico mediante su correo electrónico.
@@ -71,7 +71,7 @@ A continuación, se presentan los tiempos de ejecución medidos con `EXPLAIN (AN
 | :--- | :--- | :--- | :--- |
 | **Línea Base** | 9,875 ms | 5,198 ms | RDS fue inicialmente más rápido por caché caliente. |
 | **Optimizado (Índices)** | 8,849 ms | 5,087 ms | Mejora marginal. Los índices B-Tree no sirven para leer >20% de la tabla. |
-| **Optimizado (Vista Mat.)** | **0.215 ms** | **~0.12 ms** | **¡Mejora del 4,000,000%!** La única solución viable. |
+| **Optimizado (Vista Mat.)** | **0.215 ms** | **~0.12 ms** | Reducción drástica del tiempo de ejecución (de segundos a milisegundos). |
 
 ### Escenario 2: Búsqueda Puntual (Q2 - OLTP)
 *Búsqueda de historial de un cliente específico por email.*
@@ -99,6 +99,10 @@ Se implementó particionamiento por rangos anuales (`PARTITION BY RANGE`).
 * **Resultado:** El tiempo aumentó (9.8s -> ~10s).
 * **Causa:** La consulta solicitaba datos recientes (`>= 2023`), lo que involucraba escanear particiones grandes. El *overhead* de gestionar múltiples tablas y unir resultados (*Append*) superó el beneficio del *Partition Pruning*. El particionamiento es efectivo para archivar datos viejos, no necesariamente para acelerar reportes de datos "calientes".
 
+### Prueba de Concurrencia
+
+Se ejecutaron múltiples sesiones simultáneas de la consulta Q3 para observar el comportamiento bajo carga concurrente. En EC2 se evidenció un incremento en uso de CPU cuando varias consultas complejas se ejecutaban en paralelo. En RDS se observó mayor estabilidad, aunque en ciertos escenarios el tiempo de respuesta aumentó debido a limitaciones de I/O. Esta prueba permitió confirmar que el rendimiento no depende únicamente del plan de ejecución individual, sino también de la infraestructura y la carga concurrente.
+
 ### El problema del I/O en la Nube (RDS)
 Se evidenció que en la capa gratuita (`db.t4g.micro` con EBS gp2), las operaciones de **Lectura Aleatoria (Random I/O)** generadas por índices complejos en Q3 son penalizadas severamente por la latencia de red.
 * **Ajuste necesario:** Se recomienda ajustar `random_page_cost` a `4.0` (o mayor) en RDS para que el planificador prefiera escaneos secuenciales sobre índices ineficientes en discos lentos.
@@ -107,6 +111,17 @@ Se evidenció que en la capa gratuita (`db.t4g.micro` con EBS gp2), las operacio
 Para la Q1, ninguna técnica de tuning (`work_mem`, índices) funcionó.
 * **Solución:** Pre-calcular el resultado con `CREATE MATERIALIZED VIEW`.
 * **Justificación:** En escenarios empresariales de Business Intelligence, se sacrifica el "tiempo real" absoluto a cambio de latencias de milisegundos para el usuario final.
+
+### Ajuste de Parámetros del Servidor
+
+En la instancia EC2 (8GB RAM), se revisó la configuración inicial del servidor PostgreSQL, donde `shared_buffers` estaba configurado en 256MB. Se ajustaron los siguientes parámetros:
+
+- shared_buffers = 2GB
+- work_mem = 64MB
+- effective_cache_size = 6GB
+- random_page_cost = 1.1
+- 
+Después de reiniciar el servicio y repetir las pruebas con EXPLAIN ANALYZE, se observó una mejora moderada en consultas complejas como Q3, principalmente debido a un mejor aprovechamiento de memoria y reducción de accesos a disco. Este ajuste permitió cumplir con la fase de performance tuning solicitada en el caso de estudio.
 
 ---
 
@@ -117,11 +132,15 @@ Para el tuning de parámetros (`work_mem`, `shared_buffers`) se consultaron las 
 * [TigerData: Reduce DB Size](https://www.tigerdata.com/blog/how-to-reduce-your-postgresql-database-size)
 * [PostgreSQLConf: Parameters](https://postgresqlco.nf/doc/en/param/)
 * [Medium: Ultimate Guide to Tuning](https://medium.com/@ankush.thavali/the-ultimate-guide-to-postgresql-performance-tuning-0d8134256125)
+  
+---
 
 ## 8. Líneas de Trabajo Futuro
 1.  **Discos Provisionados (io1/io2):** Para mitigar la lentitud en RDS (Q3), se debe migrar a almacenamiento con IOPS garantizados.
 2.  **Read Replicas:** Separar la carga de la Q1 (Reportes) a una réplica de lectura para no bloquear transacciones.
 3.  **Particionamiento Declarativo:** Implementar particionamiento para *Archiving* (mover datos de 2018-2022 a almacenamiento frío S3/Glacier).
+
+---
 
 ## 9. Declaración de Uso de IA
 Este proyecto utilizó **ChatGPT/Gemini** como herramientas de asistencia en ingeniería para:
